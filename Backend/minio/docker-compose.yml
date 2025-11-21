@@ -1,0 +1,20 @@
+# ai-document-agent/backend/minio/docker-compose.yml
+
+version: '3.7'
+
+services:
+  minio:
+    image: minio/minio
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"   # Cổng API cho code (Node.js, n8n)
+      - "9001:9001"   # Cổng giao diện Web (UI)
+    environment:
+      # Dùng key này cho local dev
+      MINIO_ROOT_USER: "minio-local-admin"
+      MINIO_ROOT_PASSWORD: "minio-local-password"
+    volumes:
+      - minio_local_data:/data
+
+volumes:
+  minio_local_data:
