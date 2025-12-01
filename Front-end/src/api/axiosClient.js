@@ -2,6 +2,7 @@
 import axios from 'axios';
 
 const instance = axios.create({
+  // Ensure frontend calls go to backend API root. If VITE_API_URL is set it can override.
   baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000'
 });
 

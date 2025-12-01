@@ -12,6 +12,7 @@ const chatController = require('../controllers/chatController');
 const authController = require('../controllers/authController');
 const docController = require('../controllers/docController');
 const userController = require('../controllers/userController');
+const departmentController = require('../controllers/departmentController');
 
 const router = express.Router();
 
@@ -58,34 +59,42 @@ const upload = multer({
 });
 
 
-// ==================== Chat Routes ====================
+// ==================== Document Routes (Protected) ====================
 
-// Send message
-router.post('/chat/message', chatController.sendMessage);
+// Upload document (authenticated users)
+router.post('/documents/upload', verifyToken, upload.single('file'), documentController.uploadDocument);
 
-// Get chat history
-router.get('/chat/history/:documentId', chatController.getChatHistory);
+// Get all documents (user sees their own, admin sees all)
+router.get('/documents', verifyToken, documentController.getDocuments);
 
-// Clear chat history
-router.delete('/chat/history/:documentId', chatController.clearChatHistory);
+// Get document by ID (with permission check)
+router.get('/documents/:id', verifyToken, documentController.getDocumentById);
 
-// ==================== Health Check ====================
-// ==================== Document Routes ====================
+// Delete document (owner or admin only)
+router.delete('/documents/:id', verifyToken, documentController.deleteDocument);
 
-// Upload document
-router.post('/documents/upload', upload.single('file'), documentController.uploadDocument);
+// Admin: Get all users with document stats
+router.get('/admin/users-stats', verifyToken, documentController.getUsersWithStats);
 
-// Get all documents
-router.get('/documents', documentController.getDocuments);
-
-// Get document by ID
-router.get('/documents/:id', documentController.getDocumentById);
-
-// Delete document
-router.delete('/documents/:id', documentController.deleteDocument);
-
+// Admin: Get documents by user ID
+router.get('/admin/users/:userId/documents', verifyToken, documentController.getDocumentsByUser);
 // 
 // 
+// ==================== Chat Routes (Protected) ====================
+
+// Send message (authenticated users, with permission check)
+router.post('/chat/message', verifyToken, chatController.sendMessage);
+
+// Get chat history (with permission check)
+router.get('/chat/history/:documentId', verifyToken, chatController.getChatHistory);
+
+// Clear chat history (with permission check)
+router.delete('/chat/history/:documentId', verifyToken, chatController.clearChatHistory);
+
+// Admin: Get chat history by user ID
+router.get('/admin/users/:userId/chats', verifyToken, chatController.getChatHistoryByUser);
+
+
 // 
 router.post('/auth/google', authController.googleLogin);
 
@@ -107,15 +116,14 @@ router.put('/documents/:id/reclassify', verifyToken, docController.reclassifyDoc
 // --- USER ROUTES (ADMIN) ---
 router.post('/users', verifyToken, userController.createUser);
 router.get('/users', verifyToken, userController.getUsers);
+router.delete('/users/:email', verifyToken, userController.deleteUser);
+router.put('/users/:email', verifyToken, userController.updateUser);
+
+// --- DEPARTMENT ROUTES ---
+router.get('/departments', departmentController.getDepartments);
 
 // --- HEALTH CHECK ---
 router.get('/', (req, res) => res.json({ message: 'Backend is running!' }));
-
-module.exports = router;
-
-// 
-// 
-// 
 
 router.get('/health', (req, res) => {
   res.json({ 
@@ -126,3 +134,4 @@ router.get('/health', (req, res) => {
 });
 
 module.exports = router;
+
