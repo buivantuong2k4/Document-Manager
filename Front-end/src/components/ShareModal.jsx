@@ -3,7 +3,23 @@ import axios from "../api/axiosClient";
 
 function ShareModal({ isOpen, doc, onClose, onShareSuccess }) {
   const [targetDept, setTargetDept] = useState("NONE");
+  const [departments, setDepartments] = useState([]);
   const [loading, setLoading] = useState(false);
+
+  // Fetch danh sách phòng ban
+  useEffect(() => {
+    const fetchDepartments = async () => {
+      try {
+        const res = await axios.get("/api/departments");
+        if (Array.isArray(res.data)) {
+          setDepartments(res.data);
+        }
+      } catch (error) {
+        console.error("Lỗi tải danh sách phòng ban:", error);
+      }
+    };
+    fetchDepartments();
+  }, []);
 
   // Reset giá trị mỗi khi mở modal cho file khác
   useEffect(() => {
@@ -58,10 +74,11 @@ function ShareModal({ isOpen, doc, onClose, onShareSuccess }) {
           <option value="NONE">🔒 Riêng tư (Chỉ mình tôi)</option>
           <option value="PUBLIC">🌐 Công khai (Toàn công ty)</option>
           <option disabled>──────────</option>
-          <option value="SALES">Phòng Kinh doanh (Sales)</option>
-          <option value="HR">Phòng Nhân sự (HR)</option>
-          <option value="IT">Phòng IT</option>
-          <option value="LEGAL">Phòng Pháp chế</option>
+          {departments.map((dept) => (
+            <option key={dept.id} value={dept.name}>
+              {dept.name}
+            </option>
+          ))}
         </select>
 
         <div

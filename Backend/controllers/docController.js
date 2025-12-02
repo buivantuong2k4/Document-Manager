@@ -2,6 +2,38 @@
 const { v4: uuidv4 } = require('uuid');
 const axios = require('axios');
 const { pool, s3 } = require('../config/clients');
+const MailController = require('./MailController');
+const classificationService = require('../services/classificationService');
+const path = require('path');
+
+// Normalize incoming filetype or filename to simple extensions n8n expects
+const normalizeFileType = (filetype, storagePath, filename) => {
+  const allowed = new Set(['pdf', 'doc', 'docx', 'xls', 'xlsx', 'txt']);
+
+  // Try to derive from MIME like 'application/pdf' or 'application/vnd.openxmlformats-...'
+  if (filetype && typeof filetype === 'string' && filetype.includes('/')) {
+    const subtype = filetype.split('/')[1].split('+')[0].toLowerCase();
+    const mimeMap = {
+      'pdf': 'pdf',
+      'msword': 'doc',
+      'vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+      'vnd.ms-excel': 'xls',
+      'vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+      'plain': 'txt',
+      'text': 'txt',
+      'octet-stream': 'txt'
+    };
+    if (mimeMap[subtype]) return mimeMap[subtype];
+  }
+
+  // If MIME didn't help, try file extension from filename or storagePath
+  const candidate = (filename || storagePath || '').toLowerCase();
+  const ext = path.extname(candidate).replace('.', '');
+  if (ext && allowed.has(ext)) return ext;
+
+  // If nothing matches, fallback to 'txt' so n8n receives a safe, processable type
+  return 'txt';
+};
 
 const N8N_WEBHOOK_URL = process.env.N8N_WEBHOOK_URL;
 
@@ -42,13 +74,13 @@ exports.uploadComplete = async (req, res) => {
 
   try {
     const dbResult = await pool.query(
-      `UPDATE documentsfile SET status = 'PENDING', uploaded_by_email = $1, shared_department = $2 WHERE id = $3 RETURNING storage_path, filetype`,
+      `UPDATE documentsfile SET status = 'PENDING', uploaded_by_email = $1, shared_department = $2 WHERE id = $3 RETURNING storage_path, filetype, filename`,
       [email, department, documentId]
     );
 
     if (dbResult.rows.length === 0) return res.status(404).json({ error: 'Document not found' });
     
-    const { storage_path, filetype } = dbResult.rows[0];
+    const { storage_path, filetype, filename } = dbResult.rows[0];
     const tempReadUrl_FromMinIO = await s3.getSignedUrlPromise('getObject', {
       Bucket: process.env.S3_BUCKET_NAME,
       Key: storage_path,
@@ -61,7 +93,8 @@ exports.uploadComplete = async (req, res) => {
     );
 
     if (N8N_WEBHOOK_URL) {
-      await axios.post(N8N_WEBHOOK_URL, { document_id: documentId, temp_read_url: tempReadUrl_ForN8N, filetype });
+      const normalizedType = normalizeFileType(filetype, storage_path, filename);
+      await axios.post(N8N_WEBHOOK_URL, { document_id: documentId, temp_read_url: tempReadUrl_ForN8N, filetype: normalizedType });
     }
 
     res.json({ message: 'Upload complete, processing started.' });
@@ -136,12 +169,8 @@ exports.n8nWebhook = async (req, res) => {
         const cleanClass = type.replace(/\s+/g, '_');
         targetFolder = `departments/${cleanClass}/`;
         
-        // Logic Mapping
-        if (type.includes('hoa_don') || type.includes('bill')) autoShareDept = 'SALES';
-        else if (type.includes('ho_so_nhan_su') || type.includes('cv')) autoShareDept = 'HR';
-        else if (type.includes('hop_dong') || type.includes('contract')) autoShareDept = 'LEGAL';
-        else if (type.includes('tai_lieu') || type.includes('code')) autoShareDept = 'IT';
-        else autoShareDept = 'PUBLIC';
+        // Use classificationService to find matching department
+        autoShareDept = await classificationService.findDepartmentByClassification(classification);
     }
 
     const newKey = targetFolder + oldKey.split('/').pop();
@@ -161,6 +190,38 @@ exports.n8nWebhook = async (req, res) => {
     );
 
     if (io) io.emit('document:processed', updateResult.rows[0]);
+
+    // Prepare and send notification emails to department members (fire-and-forget)
+    try {
+      const docRow = updateResult.rows[0];
+      const filename = docRow.filename || oldKey.split('/').pop();
+      const filetype = docRow.filetype || 'application/pdf';
+
+      // Generate a view link (signed URL) for the document valid for 1 hour
+      const viewUrl = await s3.getSignedUrlPromise('getObject', {
+        Bucket: process.env.S3_BUCKET_NAME,
+        Key: newKey,
+        Expires: 60 * 60,
+        ResponseContentDisposition: `inline; filename="${filename}"`,
+        ResponseContentType: filetype || 'application/pdf'
+      });
+
+      const subject = `Tài liệu mới được chia sẻ: ${filename}`;
+      const text = `Tài liệu "${filename}" đã được phân loại là "${classification}" và được chia sẻ tới phòng ban ${autoShareDept}.\nXem tài liệu: ${viewUrl}`;
+      const html = `<p>Tài liệu "<strong>${filename}</strong>" đã được phân loại là "<strong>${classification}</strong>" và được chia sẻ tới phòng ban <strong>${autoShareDept}</strong>.</p><p><a href=\"${viewUrl}\" target=\"_blank\">Click để xem tài liệu</a></p>`;
+
+      if (autoShareDept && autoShareDept !== 'NONE') {
+        if (autoShareDept === 'PUBLIC') {
+          // send to all users
+          MailController.sendToAll(pool, subject, text, html).catch(err => console.error('Mail send error:', err));
+        } else {
+          MailController.sendToDepartment(pool, autoShareDept, subject, text, html).catch(err => console.error('Mail send error:', err));
+        }
+      }
+    } catch (mailErr) {
+      console.error('Error preparing/sending notification emails:', mailErr);
+    }
+
     res.json({ success: true, new_path: newKey, auto_shared_to: autoShareDept });
 
   } catch (error) {
@@ -185,6 +246,31 @@ exports.shareDocument = async (req, res) => {
         }
 
         await pool.query('UPDATE documentsfile SET shared_department = $1 WHERE id = $2', [target_department, id]);
+        // Send notification emails to the target department (fire-and-forget)
+        try {
+          const filename = doc.filename || doc.storage_path.split('/').pop();
+          const filetype = doc.filetype || 'application/pdf';
+          const viewUrl = await s3.getSignedUrlPromise('getObject', {
+            Bucket: process.env.S3_BUCKET_NAME,
+            Key: doc.storage_path,
+            Expires: 60 * 60,
+            ResponseContentDisposition: `inline; filename="${filename}"`,
+            ResponseContentType: filetype
+          });
+
+          const subject = `Tài liệu được chia sẻ: ${filename}`;
+          const text = `Tài liệu "${filename}" đã được chia sẻ tới phòng ban ${target_department}.\nXem tài liệu: ${viewUrl}`;
+          const html = `<p>Tài liệu "<strong>${filename}</strong>" đã được chia sẻ tới phòng ban <strong>${target_department}</strong>.</p><p><a href=\"${viewUrl}\" target=\"_blank\">Click để xem tài liệu</a></p>`;
+
+          if (target_department === 'PUBLIC') {
+            MailController.sendToAll(pool, subject, text, html).catch(err => console.error('Mail send error:', err));
+          } else if (target_department && target_department !== 'NONE') {
+            MailController.sendToDepartment(pool, target_department, subject, text, html).catch(err => console.error('Mail send error:', err));
+          }
+        } catch (mailErr) {
+          console.error('Error preparing/sending share emails:', mailErr);
+        }
+
         res.json({ success: true });
     } catch (error) {
         res.status(500).json({ error: "Lỗi server" });
@@ -223,11 +309,9 @@ exports.reclassifyDocument = async (req, res) => {
         const oldKey = docCheck.rows[0].storage_path;
         const type = new_classification.toLowerCase();
         let targetFolder = `departments/${type}/`;
-        let newSharedDept = 'PUBLIC';
-
-        // (Giản lược logic mapping để code ngắn gọn - copy lại logic đầy đủ từ index.js nếu cần)
-        if (type.includes('hoa_don')) newSharedDept = 'SALES';
-        else if (type.includes('hop_dong')) newSharedDept = 'LEGAL';
+        
+        // Use classificationService to find matching department
+        const newSharedDept = await classificationService.findDepartmentByClassification(new_classification);
         
         const newKey = targetFolder + oldKey.split('/').pop();
 
@@ -244,7 +328,32 @@ exports.reclassifyDocument = async (req, res) => {
             'UPDATE documentsfile SET classification = $1, shared_department = $2, storage_path = $3 WHERE id = $4',
             [new_classification, newSharedDept, newKey, id]
         );
-        res.json({ success: true });
+          // Send notification emails to the newSharedDept (fire-and-forget)
+          try {
+            const filename = docCheck.rows[0].filename || oldKey.split('/').pop();
+            const filetype = docCheck.rows[0].filetype || 'application/pdf';
+            const viewUrl = await s3.getSignedUrlPromise('getObject', {
+              Bucket: process.env.S3_BUCKET_NAME,
+              Key: newKey,
+              Expires: 60 * 60,
+              ResponseContentDisposition: `inline; filename="${filename}"`,
+              ResponseContentType: filetype
+            });
+
+            const subject = `Tài liệu đã được phân loại lại: ${filename}`;
+            const text = `Tài liệu "${filename}" đã được phân loại lại thành "${new_classification}" và được chia sẻ tới phòng ban ${newSharedDept}.\nXem tài liệu: ${viewUrl}`;
+            const html = `<p>Tài liệu "<strong>${filename}</strong>" đã được phân loại lại thành "<strong>${new_classification}</strong>" và được chia sẻ tới phòng ban <strong>${newSharedDept}</strong>.</p><p><a href=\"${viewUrl}\" target=\"_blank\">Click để xem tài liệu</a></p>`;
+
+            if (newSharedDept === 'PUBLIC') {
+              MailController.sendToAll(pool, subject, text, html).catch(err => console.error('Mail send error:', err));
+            } else if (newSharedDept && newSharedDept !== 'NONE') {
+              MailController.sendToDepartment(pool, newSharedDept, subject, text, html).catch(err => console.error('Mail send error:', err));
+            }
+          } catch (mailErr) {
+            console.error('Error preparing/sending reclassify emails:', mailErr);
+          }
+
+          res.json({ success: true });
     } catch (error) {
         res.status(500).json({ error: "Lỗi server" });
     }

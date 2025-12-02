@@ -13,7 +13,10 @@ exports.googleLogin = async (req, res) => {
     });
     const { email, name, picture } = ticket.getPayload();
 
-    const userResult = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
+    const userResult = await pool.query(
+      'SELECT u.*, d.name as department FROM users u LEFT JOIN departments d ON u.department_id = d.id WHERE u.email = $1',
+      [email]
+    );
 
     if (userResult.rows.length === 0) {
       return res.status(403).json({ error: 'Email này chưa được cấp quyền truy cập.' });
@@ -24,14 +27,14 @@ exports.googleLogin = async (req, res) => {
     await pool.query('UPDATE users SET full_name = $1, avatar_url = $2 WHERE email = $3', [name, picture, email]);
 
     const appToken = jwt.sign(
-      { email: user.email, role: user.role, department: user.department },
+      { id: user.id, email: user.email, role: user.role, department: user.department, department_id: user.department_id },
       JWT_SECRET,
       { expiresIn: '24h' }
     );
 
     res.json({
       token: appToken,
-      user: { email: user.email, full_name: name, role: user.role, department: user.department, avatar: picture }
+      user: {id: user.id, email: user.email, full_name: name, role: user.role, department: user.department, department_id: user.department_id, avatar: picture }
     });
   } catch (error) {
     console.error("Login error:", error);

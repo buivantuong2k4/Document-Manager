@@ -5,12 +5,27 @@ import axios from "../api/axiosClient";
 function AdminUserManagement() {
   // Khởi tạo là mảng rỗng [] để tránh lỗi .map ban đầu
   const [users, setUsers] = useState([]);
+  const [departments, setDepartments] = useState([]);
   const [newUser, setNewUser] = useState({
     email: "",
     full_name: "",
-    department: "SALES",
+    department: "",
   });
   const [message, setMessage] = useState("");
+
+  // Load danh sách phòng ban
+  const fetchDepartments = async () => {
+    try {
+      const res = await axios.get("/api/departments");
+      if (Array.isArray(res.data) && res.data.length > 0) {
+        setDepartments(res.data);
+        // Set default department to first one
+        setNewUser((prev) => ({ ...prev, department: res.data[0].name }));
+      }
+    } catch (error) {
+      console.error("Lỗi tải danh sách phòng ban:", error);
+    }
+  };
 
   // Load danh sách nhân viên
   const fetchUsers = async () => {
@@ -31,6 +46,7 @@ function AdminUserManagement() {
   };
 
   useEffect(() => {
+    fetchDepartments();
     fetchUsers();
   }, []);
 
@@ -42,6 +58,53 @@ function AdminUserManagement() {
       setMessage("✅ Thêm thành công!");
       setNewUser({ email: "", full_name: "", department: "SALES" });
       fetchUsers(); // Reload list
+    } catch (error) {
+      setMessage(`❌ Lỗi: ${error.response?.data?.error || error.message}`);
+    }
+  };
+
+  // Xử lý xóa user (chỉ Admin)
+  const handleDeleteUser = async (email) => {
+    const ok = window.confirm(`Xác nhận xóa quyền của ${email}?`);
+    if (!ok) return;
+    try {
+      await axios.delete(`/api/users/${encodeURIComponent(email)}`);
+      setMessage("✅ Xóa thành công!");
+      setTimeout(() => setMessage(""), 3000);
+      fetchUsers();
+    } catch (error) {
+      setMessage(`❌ Lỗi: ${error.response?.data?.error || error.message}`);
+    }
+  };
+
+  // State quản lý chỉnh sửa
+  const [editingUser, setEditingUser] = useState(null);
+  const [editForm, setEditForm] = useState({ department: "", full_name: "" });
+
+  // Mở form chỉnh sửa
+  const openEditModal = (user) => {
+    setEditingUser(user.email);
+    setEditForm({ department: user.department, full_name: user.full_name });
+  };
+
+  // Đóng form chỉnh sửa
+  const closeEditModal = () => {
+    setEditingUser(null);
+    setEditForm({ department: "", full_name: "" });
+  };
+
+  // Xử lý cập nhật user
+  const handleUpdateUser = async (e) => {
+    e.preventDefault();
+    try {
+      await axios.put(`/api/users/${encodeURIComponent(editingUser)}`, {
+        department: editForm.department,
+        full_name: editForm.full_name,
+      });
+      setMessage("✅ Cập nhật thành công!");
+      setTimeout(() => setMessage(""), 3000);
+      closeEditModal();
+      fetchUsers();
     } catch (error) {
       setMessage(`❌ Lỗi: ${error.response?.data?.error || error.message}`);
     }
@@ -97,10 +160,12 @@ function AdminUserManagement() {
           }
           style={inputStyle}
         >
-          <option value="SALES">Sales</option>
-          <option value="HR">Nhân sự (HR)</option>
-          <option value="IT">IT</option>
-          <option value="LEGAL">Pháp chế</option>
+          <option value="">-- Chọn phòng ban --</option>
+          {departments.map((dept) => (
+            <option key={dept.id} value={dept.name}>
+              {dept.name}
+            </option>
+          ))}
         </select>
         <button type="submit" style={buttonStyle}>
           + Thêm quyền
@@ -123,6 +188,7 @@ function AdminUserManagement() {
             <th style={thStyle}>Tên</th>
             <th style={thStyle}>Phòng ban</th>
             <th style={thStyle}>Vai trò</th>
+            <th style={thStyle}>Hành động</th>
           </tr>
         </thead>
         <tbody>
@@ -136,12 +202,28 @@ function AdminUserManagement() {
                   <span style={deptBadgeStyle}>{u.department}</span>
                 </td>
                 <td style={tdStyle}>{u.role}</td>
+                <td style={tdStyle}>
+                  <button
+                    onClick={() => openEditModal(u)}
+                    style={editButtonStyle}
+                    title={`Chỉnh sửa phòng ban của ${u.email}`}
+                  >
+                    Sửa
+                  </button>
+                  <button
+                    onClick={() => handleDeleteUser(u.email)}
+                    style={deleteButtonStyle}
+                    title={`Xóa quyền của ${u.email}`}
+                  >
+                    Xóa
+                  </button>
+                </td>
               </tr>
             ))
           ) : (
             <tr>
               <td
-                colSpan="4"
+                colSpan="5"
                 style={{ textAlign: "center", padding: "20px", color: "#999" }}
               >
                 Chưa có nhân viên nào trong danh sách.
@@ -150,11 +232,103 @@ function AdminUserManagement() {
           )}
         </tbody>
       </table>
+
+      {/* EDIT MODAL */}
+      {editingUser && (
+        <div style={modalOverlayStyle}>
+          <div style={modalStyle}>
+            <h4>Chỉnh sửa nhân viên</h4>
+            <form onSubmit={handleUpdateUser}>
+              <div style={{ marginBottom: "10px" }}>
+                <label
+                  style={{
+                    display: "block",
+                    marginBottom: "5px",
+                    fontWeight: "600",
+                  }}
+                >
+                  Tên nhân viên:
+                </label>
+                <input
+                  type="text"
+                  value={editForm.full_name}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, full_name: e.target.value })
+                  }
+                  style={inputStyle}
+                />
+              </div>
+              <div style={{ marginBottom: "15px" }}>
+                <label
+                  style={{
+                    display: "block",
+                    marginBottom: "5px",
+                    fontWeight: "600",
+                  }}
+                >
+                  Phòng ban:
+                </label>
+                <select
+                  value={editForm.department}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, department: e.target.value })
+                  }
+                  style={inputStyle}
+                >
+                  {departments.map((dept) => (
+                    <option key={dept.id} value={dept.name}>
+                      {dept.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  gap: "10px",
+                  justifyContent: "flex-end",
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={closeEditModal}
+                  style={cancelButtonStyle}
+                >
+                  Hủy
+                </button>
+                <button type="submit" style={buttonStyle}>
+                  Lưu
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 // --- STYLES ---
+const modalOverlayStyle = {
+  position: "fixed",
+  top: 0,
+  left: 0,
+  right: 0,
+  bottom: 0,
+  background: "rgba(0, 0, 0, 0.5)",
+  display: "flex",
+  justifyContent: "center",
+  alignItems: "center",
+  zIndex: 1000,
+};
+const modalStyle = {
+  background: "white",
+  padding: "20px",
+  borderRadius: "8px",
+  boxShadow: "0 4px 12px rgba(0, 0, 0, 0.15)",
+  maxWidth: "400px",
+  width: "90%",
+};
 const inputStyle = {
   padding: "8px",
   borderRadius: "4px",
@@ -164,6 +338,34 @@ const inputStyle = {
 const buttonStyle = {
   padding: "8px 16px",
   background: "#007bff",
+  color: "white",
+  border: "none",
+  borderRadius: "4px",
+  cursor: "pointer",
+  fontWeight: "bold",
+};
+const deleteButtonStyle = {
+  padding: "6px 10px",
+  background: "#dc3545",
+  color: "white",
+  border: "none",
+  borderRadius: "4px",
+  cursor: "pointer",
+  fontWeight: "600",
+  marginLeft: "5px",
+};
+const editButtonStyle = {
+  padding: "6px 10px",
+  background: "#28a745",
+  color: "white",
+  border: "none",
+  borderRadius: "4px",
+  cursor: "pointer",
+  fontWeight: "600",
+};
+const cancelButtonStyle = {
+  padding: "8px 16px",
+  background: "#6c757d",
   color: "white",
   border: "none",
   borderRadius: "4px",

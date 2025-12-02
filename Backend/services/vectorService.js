@@ -1,12 +1,11 @@
 const pool = require('../config/database');
 const geminiService = require('./openaiService');
 
-
 class VectorService {
   /**
    * Store document chunks with embeddings
    */
-  async storeDocumentChunks(chunks, documentId) {
+  async storeDocumentChunks(chunks, documentId, userId) {
     const client = await pool.connect();
     
     try {
@@ -16,25 +15,23 @@ class VectorService {
         const embedding = await geminiService.generateEmbedding(chunk);
         
         await client.query(
-          `INSERT INTO documents (content, metadata, embedding) 
-           VALUES ($1, $2, $3)`,
+          `INSERT INTO documents (content, metadata, embedding, user_id) 
+           VALUES ($1, $2, $3, $4)`,
           [
             chunk,
             JSON.stringify({ document_id: documentId }),
-            JSON.stringify(embedding)
+            JSON.stringify(embedding),
+            userId
           ]
         );
       }
 
       await client.query('COMMIT');
-      console.log(`✅ Stored ${chunks.length} chunks for document ${documentId}`);
+      console.log(`✅ Stored ${chunks.length} chunks for document ${documentId} (user: ${userId})`);
     } catch (error) {
       await client.query('ROLLBACK');
       console.error('Error storing document chunks:', error);
-     console.error("❌ LỖI DB CHI TIẾT:", error.message); 
-    if (error.detail) console.error("Chi tiết:", error.detail);
-    
-    throw error; // Ném lỗi gốc ra để controller bắt được
+      throw new Error('Failed to store document chunks');
     } finally {
       client.release();
     }
@@ -43,16 +40,17 @@ class VectorService {
   /**
    * Search for similar documents
    */
-  async searchSimilarDocuments(query, documentId, limit = 5) {
+  async searchSimilarDocuments(query, documentId, userId, limit = 5) {
     try {
       const queryEmbedding = await geminiService.generateEmbedding(query);
       
       const result = await pool.query(
-        `SELECT * FROM match_documents($1::vector, $2, $3)`,
+        `SELECT * FROM match_documents($1::vector, $2, $3, $4)`,
         [
           JSON.stringify(queryEmbedding),
           limit,
-          JSON.stringify({ document_id: documentId })
+          JSON.stringify({ document_id: documentId }),
+          userId // User filter
         ]
       );
 

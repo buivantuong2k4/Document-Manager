@@ -9,6 +9,8 @@ class ChatController {
   async sendMessage(req, res) {
     try {
       const { documentId, message, conversationHistory = [] } = req.body;
+      const userId = req.user.id || req.user.email;
+      const isAdmin = req.user.role === 'admin';
 
       if (!documentId || !message) {
         return res.status(400).json({ 
@@ -16,9 +18,9 @@ class ChatController {
         });
       }
 
-      // Verify document exists
+      // Verify document exists and check permission
       const docCheck = await pool.query(
-        `SELECT id FROM document_metadata WHERE id = $1`,
+        `SELECT id, user_id FROM document_metadata WHERE id = $1`,
         [documentId]
       );
 
@@ -26,12 +28,21 @@ class ChatController {
         return res.status(404).json({ error: 'Document not found' });
       }
 
-      console.log(`💬 Processing message for document: ${documentId}`);
+      const doc = docCheck.rows[0];
 
-      // Search for relevant chunks
+      // Check permission: user can only chat with their own documents, admin can chat with any
+      if (!isAdmin && doc.user_id !== userId) {
+        return res.status(403).json({ error: 'Access denied to this document' });
+      }
+
+      console.log(`💬 Processing message for document: ${documentId} by user: ${userId}`);
+
+      // Search for relevant chunks (filter by user for non-admin)
+      const searchUserId = isAdmin ? null : userId;
       const similarDocs = await vectorService.searchSimilarDocuments(
         message, 
-        documentId, 
+        documentId,
+        searchUserId,
         5
       );
 
@@ -55,11 +66,11 @@ class ChatController {
         formattedHistory
       );
 
-      // Save to chat history
+      // Save to chat history with user_id
       await pool.query(
-        `INSERT INTO chat_history (document_id, user_message, bot_response) 
-         VALUES ($1, $2, $3)`,
-        [documentId, message, botResponse]
+        `INSERT INTO chat_history (document_id, user_id, user_message, bot_response) 
+         VALUES ($1, $2, $3, $4)`,
+        [documentId, userId, message, botResponse]
       );
 
       res.json({
@@ -88,6 +99,25 @@ class ChatController {
     try {
       const { documentId } = req.params;
       const { limit = 50 } = req.query;
+      const userId = req.user.id || req.user.email;
+      const isAdmin = req.user.role === 'admin';
+
+      // Check document ownership
+      const docCheck = await pool.query(
+        `SELECT user_id FROM document_metadata WHERE id = $1`,
+        [documentId]
+      );
+
+      if (docCheck.rows.length === 0) {
+        return res.status(404).json({ error: 'Document not found' });
+      }
+
+      const doc = docCheck.rows[0];
+
+      // Check permission
+      if (!isAdmin && doc.user_id !== userId) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
 
       const result = await pool.query(
         `SELECT id, user_message, bot_response, created_at 
@@ -127,6 +157,25 @@ class ChatController {
   async clearChatHistory(req, res) {
     try {
       const { documentId } = req.params;
+      const userId = req.user.id || req.user.email;
+      const isAdmin = req.user.role === 'admin';
+
+      // Check document ownership
+      const docCheck = await pool.query(
+        `SELECT user_id FROM document_metadata WHERE id = $1`,
+        [documentId]
+      );
+
+      if (docCheck.rows.length === 0) {
+        return res.status(404).json({ error: 'Document not found' });
+      }
+
+      const doc = docCheck.rows[0];
+
+      // Check permission
+      if (!isAdmin && doc.user_id !== userId) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
 
       const result = await pool.query(
         `DELETE FROM chat_history WHERE document_id = $1`,
@@ -142,6 +191,36 @@ class ChatController {
     } catch (error) {
       console.error('Clear chat history error:', error);
       res.status(500).json({ error: 'Failed to clear chat history' });
+    }
+  }
+
+  /**
+   * Get chat history by user (Admin only)
+   */
+  async getChatHistoryByUser(req, res) {
+    try {
+      const { userId } = req.params;
+      const { limit = 100 } = req.query;
+
+      const result = await pool.query(
+        `SELECT ch.id, ch.document_id, ch.user_message, ch.bot_response, ch.created_at,
+                dm.title as document_title
+         FROM chat_history ch
+         LEFT JOIN document_metadata dm ON ch.document_id = dm.id
+         WHERE ch.user_id = $1
+         ORDER BY ch.created_at DESC
+         LIMIT $2`,
+        [userId, limit]
+      );
+
+      res.json({ 
+        chats: result.rows,
+        total: result.rows.length
+      });
+
+    } catch (error) {
+      console.error('Get user chat history error:', error);
+      res.status(500).json({ error: 'Failed to retrieve chat history' });
     }
   }
 }
