@@ -7,16 +7,17 @@ import {
   AlertTriangle,
   Users,
   FileText,
+  PenTool, // Import thêm icon này cho đẹp
 } from "lucide-react";
 
 export default function Dashboard({ user }) {
   const navigate = useNavigate();
 
-  // Dữ liệu mẫu cho Dashboard (Statics)
+  // Dữ liệu mẫu cho Dashboard (Statics) - GIỮ NGUYÊN CŨ
   const stats = [
     {
       title: "Tổng tài liệu",
-      value: "1,234", // Bạn có thể fetch API để lấy số thật nếu muốn
+      value: "1,234",
       change: "+12%",
       icon: FileText,
       color: "from-blue-500 to-blue-600",
@@ -50,7 +51,7 @@ export default function Dashboard({ user }) {
 
   return (
     <div className="space-y-6 animate-fade-in-up">
-      {/* Welcome Section */}
+      {/* Welcome Section - GIỮ NGUYÊN CŨ */}
       <div className="bg-gradient-to-r from-blue-600 to-purple-600 rounded-2xl p-8 text-white shadow-xl relative overflow-hidden">
         <div className="relative z-10">
           <h1 className="text-3xl font-bold mb-2">
@@ -66,7 +67,7 @@ export default function Dashboard({ user }) {
         <div className="absolute right-0 top-0 h-full w-1/3 bg-white/10 skew-x-12 transform translate-x-12"></div>
       </div>
 
-      {/* Stats Grid */}
+      {/* Stats Grid - GIỮ NGUYÊN CŨ */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {stats.map((stat, index) => {
           const Icon = stat.icon;
@@ -101,25 +102,29 @@ export default function Dashboard({ user }) {
 
       {/* Quick Actions & Recent */}
       <div className="grid lg:grid-cols-2 gap-6">
-        {/* Quick Actions */}
+        {/* Quick Actions - PHẦN NÀY ĐÃ SỬA */}
         <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
           <h2 className="text-xl font-bold text-gray-900 mb-4">
             Thao tác nhanh
           </h2>
           <div className="grid grid-cols-2 gap-4">
+            {/* === NÚT MỚI: QUẢN LÝ KÝ SỐ (GỘP 3 MỤC) === */}
             <button
-              onClick={() => navigate("/documents")}
-              className="p-4 border border-gray-200 rounded-xl hover:border-blue-500 hover:bg-blue-50 transition group flex flex-col items-center justify-center text-center h-32"
+              onClick={() => navigate("/signature-manager")} // Chuyển đến trang gộp
+              className="p-4 border border-blue-200 bg-blue-50 rounded-xl hover:border-blue-500 hover:bg-blue-100 transition group flex flex-col items-center justify-center text-center h-32"
             >
-              <FolderOpen
-                className="text-gray-400 group-hover:text-blue-500 mb-3 transition"
+              <PenTool
+                className="text-blue-500 group-hover:scale-110 mb-3 transition"
                 size={32}
               />
-              <p className="font-medium text-gray-700 group-hover:text-blue-700">
-                Quản lý File
-              </p>
+              <p className="font-bold text-blue-800">Quản lý Ký số</p>
+              <span className="text-xs text-blue-600 mt-1">
+                Danh sách, Đã ký, Ký ảnh
+              </span>
             </button>
+            {/* =========================================== */}
 
+            {/* Nút Chat (Giữ lại) */}
             <button
               onClick={() => navigate("/chat")}
               className="p-4 border border-gray-200 rounded-xl hover:border-purple-500 hover:bg-purple-50 transition group flex flex-col items-center justify-center text-center h-32"
@@ -133,7 +138,7 @@ export default function Dashboard({ user }) {
               </p>
             </button>
 
-            {/* Chỉ hiện cho Admin */}
+            {/* Chỉ hiện cho Admin (Giữ lại) */}
             {user?.role === "ADMIN" && (
               <button
                 onClick={() => navigate("/admin")}
@@ -151,7 +156,7 @@ export default function Dashboard({ user }) {
           </div>
         </div>
 
-        {/* System Status (Static) */}
+        {/* System Status (Static) - GIỮ NGUYÊN CŨ */}
         <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
           <h2 className="text-xl font-bold text-gray-900 mb-4">
             Hoạt động gần đây
