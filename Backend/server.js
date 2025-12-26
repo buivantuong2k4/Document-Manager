@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
+const multer = require('multer');
 require('dotenv').config();
 
 
@@ -19,7 +20,17 @@ const PORT = process.env.PORT || 5000;
 // ==================== Middleware ====================
 
 // Security
-app.use(helmet());
+app.use(helmet({
+  frameguard: false,
+  crossOriginResourcePolicy: false,
+  contentSecurityPolicy: {
+    directives: {
+      frameAncestors: ["'self'", "http://localhost:5173", "http://localhost:5174"]
+    }
+  }
+}));
+
+
 
 // CORS
 app.use(cors({

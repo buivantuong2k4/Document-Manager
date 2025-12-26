@@ -15,6 +15,7 @@ import UploadModal from "./components/UploadModal";
 import DocumentList from "./components/DocumentList";
 import AdminUserManagement from "./components/AdminUserManagement";
 import RAGInterface from "./components/RAGInterface";
+import SignatureManager from "./components/SignatureManager";
 
 // --- IMPORT COMPONENTS MỚI (Tạo ở bước sau) ---
 import Dashboard from "./components/Dashboard";
@@ -45,7 +46,11 @@ function App() {
     }
 
     // Check server
-    fetch("http://localhost:5000/api/")
+    fetch(
+      import.meta.env.VITE_API_URL
+        ? import.meta.env.VITE_API_URL + "/api/"
+        : "http://localhost:5000/api/"
+    )
       .then((res) => res.json())
       .then(() => setServerStatus("Online 🟢"))
       .catch(() => setServerStatus("Offline 🔴"))
@@ -105,6 +110,7 @@ function App() {
               }
             >
               <Route path="/" element={<Dashboard user={user} />} />
+              <Route path="/signature-manager" element={<SignatureManager />} />
               <Route
                 path="/documents"
                 element={<DocumentList refreshKey={refreshKey} user={user} />}
