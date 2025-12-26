@@ -28,8 +28,7 @@ services:
       - pgadmin-data:/var/lib/pgadmin
     networks:          # <--- THÊM DÒNG NÀY
       - rag_network
-
-  # 2. MinIO Object Storage
+   # 2. MinIO Object Storage
   minio:
     image: minio/minio:latest
     container_name: rag_minio
@@ -59,7 +58,6 @@ services:
       "
     networks:
       - rag_network
-
 volumes:
   postgres_data:
   minio_data:

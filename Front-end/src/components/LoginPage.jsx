@@ -12,8 +12,15 @@ function LoginPage({ onLoginSuccess }) {
         token: credentialResponse.credential,
       });
 
-      // Nếu thành công -> Báo cho App.js
+      // Nếu thành công -> Lưu vào localStorage
       console.log("Login Success:", res.data);
+
+      // 💾 Lưu user và token vào localStorage
+      if (res.data.user) {
+        localStorage.setItem("user", JSON.stringify(res.data.user));
+        localStorage.setItem("token", res.data.token || "");
+      }
+
       onLoginSuccess(res.data); // res.data chứa { token, user }
     } catch (error) {
       console.error("Login Failed:", error.response?.data || error.message);
