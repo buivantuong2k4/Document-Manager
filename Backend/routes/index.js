@@ -15,6 +15,7 @@ const chatController = require('../controllers/chatController');
 const userController = require('../controllers/userController');
 const signController = require('../controllers/signController');
 const departmentController = require('../controllers/departmentController');
+const errFilesController = require('../controllers/errFilesController');   // Kiểm tra lỗi file
 
 // ==========================================
 // 1. CẤU HÌNH UPLOAD (MULTER)
@@ -143,9 +144,7 @@ router.put('/users/:email', verifyToken, userController.updateUser);
 router.get('/departments', departmentController.getDepartments);
 
 
-// ==========================================
-// 6. SIGN ROUTES (Chữ ký điện tử)
-// ==========================================
+// --- Sign Routes (Chữ ký điện tử) ---
 // Sử dụng uploadMemory vì signController thường xử lý buffer trực tiếp
 
 // --- Upload Routes ---
@@ -170,5 +169,14 @@ router.post("/send-email", signController.sendEmailRequest);
 router.post("/send-email-no-signed", signController.sendEmailNoSigned);
 router.post("/resend-file/:id", signController.resendFile);
 
+
+// ==========================================
+// 7. FILE ERROR CHECK ROUTES
+// ==========================================
+
+router.get('/files-err', errFilesController.getFiles);
+router.get('/files-err/:id/status', errFilesController.getFileStatus);
+router.post('/files-err/:id/process', errFilesController.processFile);
+router.post('/files-err/:id/callback', errFilesController.fileCallback);
 
 module.exports = router;

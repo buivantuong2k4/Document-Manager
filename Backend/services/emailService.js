@@ -1,7 +1,7 @@
 // services/emailService.js
 const nodemailer = require("nodemailer");
 const { getSignatureAndEmail } = require("./sheetService");
-const { fileMapping } = require("../utils/fileMapping").default;
+const { fileMapping } = require("../utils/fileMapping");
 
 // Tạo transporter Gmail chung
 const transporter = nodemailer.createTransport({

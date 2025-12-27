@@ -7,7 +7,7 @@ const { s3 } = require("../config/clients");
 const pool = require("../config/database");
 const axios = require("axios");
 
-const { fileMapping } = require('../utils/fileMapping').default;
+const { fileMapping } = require('../utils/fileMapping');
 const { sendConfirmationToN8N } = require("../services/n8nService");
 const { uploadSignedPDFToMinio } = require("../services/driveService");
 const { sendSignedEmail } = require("../services/emailService");

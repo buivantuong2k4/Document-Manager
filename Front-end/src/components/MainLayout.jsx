@@ -9,7 +9,8 @@ import {
   Upload,
   Menu,
   X,
-  PenTool, // <--- 1. Thêm icon PenTool vào đây
+  PenTool,
+  AlertCircle, // <--- Thêm icon cho trang kiểm tra lỗi
 } from "lucide-react";
 
 const MainLayout = ({ user, onLogout, onUploadClick, serverStatus }) => {
@@ -25,8 +26,8 @@ const MainLayout = ({ user, onLogout, onUploadClick, serverStatus }) => {
   const navItems = [
     { path: "/", label: "Tổng quan", icon: LayoutDashboard },
     { path: "/documents", label: "Tài liệu", icon: FolderOpen },
-    // Thêm mục này vào:
     { path: "/signature-manager", label: "Quản lý Ký số", icon: PenTool },
+    { path: "/check-errors", label: "Kiểm tra lỗi", icon: AlertCircle },
     { path: "/chat", label: "Trợ lý AI", icon: MessageSquare },
   ];
 

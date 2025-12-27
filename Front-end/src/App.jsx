@@ -20,6 +20,7 @@ import SignatureManager from "./components/SignatureManager";
 // --- IMPORT COMPONENTS MỚI (Tạo ở bước sau) ---
 import Dashboard from "./components/Dashboard";
 import MainLayout from "./components/MainLayout";
+import Er_HomePage from "./components/Er_HomePage";
 import "./App.css";
 
 const GOOGLE_CLIENT_ID =
@@ -111,6 +112,7 @@ function App() {
             >
               <Route path="/" element={<Dashboard user={user} />} />
               <Route path="/signature-manager" element={<SignatureManager />} />
+              <Route path="/check-errors" element={<Er_HomePage />} />
               <Route
                 path="/documents"
                 element={<DocumentList refreshKey={refreshKey} user={user} />}

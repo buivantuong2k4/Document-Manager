@@ -36,17 +36,30 @@ const normalizeFileType = (filetype, storagePath, filename) => {
 };
 
 const N8N_WEBHOOK_URL = process.env.N8N_WEBHOOK_URL;
+// Hàm xóa dấu tiếng Việt đơn giản
+// 1. Thêm hàm dọn dẹp tên file ở đầu file
+const sanitizeFilename = (filename) => {
+  return filename
+    .normalize('NFD')                     // Tách các dấu ra khỏi chữ cái
+    .replace(/[\u0300-\u036f]/g, '')      // Xóa các dấu
+    .replace(/đ/g, 'd').replace(/Đ/g, 'D') // Sửa chữ đ
+    .replace(/[^a-zA-Z0-9.-]/g, '_')      // Thay khoảng trắng và ký tự đặc biệt bằng "_"
+    .replace(/_{2,}/g, '_');              // Tránh nhiều dấu gạch dưới liên tiếp
+};
 
-// 1. Request Upload
 exports.requestUpload = async (req, res) => {
-  console.log("Data received:", req.body);
   const { filename, filetype } = req.body;
-  if (!filename || !filetype) return res.status(400).json({ error: 'Missing filename or filetype' });
+  if (!filename || !filetype) return res.status(400).json({ error: 'Missing filename' });
 
   const documentId = uuidv4();
-  const storagePath = `uploads/${documentId}-${filename}`;
+  
+  // SỬA TẠI ĐÂY: Dùng tên đã dọn sạch để lưu trữ
+  const cleanName = sanitizeFilename(filename);
+  const storagePath = `uploads/${documentId}-${cleanName}`;
 
   try {
+    // filename (vẫn giữ nguyên có dấu) để hiển thị UI
+    // storage_path (đã sạch dấu) để hệ thống tìm file
     await pool.query(
       'INSERT INTO documentsfile (id, filename, storage_path, status, filetype) VALUES ($1, $2, $3, $4, $5)',
       [documentId, filename, storagePath, 'UPLOADING', filetype]
@@ -61,8 +74,7 @@ exports.requestUpload = async (req, res) => {
 
     res.json({ documentId, uploadUrl });
   } catch (error) {
-    console.error('Error requesting upload:', error);
-    res.status(500).json({ error: 'Failed to create pre-signed URL' });
+    res.status(500).json({ error: 'Failed to create URL' });
   }
 };
 
